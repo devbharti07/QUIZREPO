@@ -31,6 +31,7 @@ const DEFAULT_STATE = {
   leaderboard: [],
   activeQuiz: null,
   lastResult: null,
+  seenQuestions: { easy: [], medium: [], hard: [] },
 };
 
 const elements = {};
@@ -160,16 +161,24 @@ function setPreferredDifficulty(difficulty) {
 
 function startNewQuiz() {
   const difficulty = state.preferredDifficulty;
-  const questionPool = window.QUIZ_QUESTIONS.filter((question) => question.difficulty === difficulty);
+  const fullPool = window.QUIZ_QUESTIONS.filter((question) => question.difficulty === difficulty);
+
+  let questionPool = fullPool.filter((q) => !state.seenQuestions[difficulty].includes(q.id));
 
   if (questionPool.length < QUESTIONS_PER_ROUND) {
-    showToast("Not enough questions found for that difficulty.", "warning");
-    return;
+    if (fullPool.length < QUESTIONS_PER_ROUND) {
+      showToast("Not enough questions found for that difficulty.", "warning");
+      return;
+    }
+    state.seenQuestions[difficulty] = [];
+    questionPool = fullPool;
   }
 
-  const questions = shuffleArray(questionPool)
-    .slice(0, QUESTIONS_PER_ROUND)
-    .map((question) => ({
+  const selectedQuestions = shuffleArray(questionPool).slice(0, QUESTIONS_PER_ROUND);
+
+  selectedQuestions.forEach(q => state.seenQuestions[difficulty].push(q.id));
+
+  const questions = selectedQuestions.map((question) => ({
       id: question.id,
       prompt: question.prompt,
       category: question.category,
@@ -936,6 +945,11 @@ function loadState() {
     leaderboard: Array.isArray(storedState?.leaderboard) ? storedState.leaderboard : [],
     activeQuiz: sanitizeActiveQuiz(storedState?.activeQuiz),
     lastResult: sanitizeLastResult(storedState?.lastResult),
+    seenQuestions: {
+      easy: Array.isArray(storedState?.seenQuestions?.easy) ? storedState.seenQuestions.easy : [],
+      medium: Array.isArray(storedState?.seenQuestions?.medium) ? storedState.seenQuestions.medium : [],
+      hard: Array.isArray(storedState?.seenQuestions?.hard) ? storedState.seenQuestions.hard : [],
+    },
   };
 
   if (!DIFFICULTY_CONFIG[mergedState.preferredDifficulty]) {
