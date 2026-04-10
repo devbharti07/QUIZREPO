@@ -206,8 +206,9 @@ function handlePowerUpUse(type) {
       const btns = Array.from(elements.optionsContainer.querySelectorAll(".option-btn"));
       const correctBtn = btns.find(b => b.dataset.option === currentQ.answer);
       if (correctBtn) {
-        correctBtn.style.boxShadow = "0 0 10px var(--brand)";
-        setTimeout(()=> correctBtn.style.boxShadow = "", 1500);
+        correctBtn.classList.add("hint-highlight");
+        showToast("💡 Hint revealed!", "accent");
+        setTimeout(()=> correctBtn.classList.remove("hint-highlight"), 1500);
       }
     } else {
       showToast("Not enough coins for Hint. Need 15🪙.", "warning");

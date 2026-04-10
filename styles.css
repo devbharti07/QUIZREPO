@@ -750,6 +750,16 @@ body::after {
   }
 }
 
+@keyframes hint-pulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(88, 213, 191, 0.7); border-color: rgba(255,255,255,0.08); }
+  50% { transform: scale(1.02); box-shadow: 0 0 15px 5px rgba(88, 213, 191, 0.4); background: rgba(88, 213, 191, 0.2); border-color: var(--brand); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(88, 213, 191, 0); border-color: rgba(255,255,255,0.08); }
+}
+
+.hint-highlight {
+  animation: hint-pulse 1.5s ease;
+}
+
 @keyframes drift {
   from {
     transform: translate3d(-1%, -1%, 0) scale(1);
