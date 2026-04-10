@@ -20,6 +20,7 @@ const DEFAULT_STATE = {
   preferredDifficulty: "medium",
   currentStreak: 0,
   longestStreak: 0,
+  lostStreak: 0,
   lastActiveDate: null,
   lastClaimDate: null,
   coins: 0,
@@ -113,6 +114,7 @@ function cacheElements() {
   elements.playAgainBtn = document.getElementById("play-again-btn");
   elements.resultHomeBtn = document.getElementById("result-home-btn");
   elements.toast = document.getElementById("toast");
+  elements.recoverStreakBtn = document.getElementById("recover-streak-btn");
 }
 
 function bindEvents() {
@@ -127,6 +129,9 @@ function bindEvents() {
   elements.pauseQuizBtn.addEventListener("click", pauseQuiz);
   elements.playAgainBtn.addEventListener("click", playAgain);
   elements.resultHomeBtn.addEventListener("click", goHome);
+  if (elements.recoverStreakBtn) {
+    elements.recoverStreakBtn.addEventListener("click", recoverStreak);
+  }
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("beforeunload", saveState);
 }
@@ -248,6 +253,21 @@ function goHome() {
   renderHome();
 }
 
+function recoverStreak() {
+  if (state.lostStreak > 0 && state.coins >= 50) {
+    state.coins -= 50;
+    state.currentStreak = state.lostStreak + 1;
+    state.longestStreak = Math.max(state.longestStreak, state.currentStreak);
+    state.lostStreak = 0;
+    saveState();
+    renderHeader();
+    renderHome();
+    showToast("Streak recovered successfully!", "success");
+  } else if (state.coins < 50) {
+    showToast("Not enough coins to recover streak. Need 50 coins.", "warning");
+  }
+}
+
 function handleOptionSelection(event) {
   const button = event.target.closest(".option-btn");
 
@@ -308,6 +328,13 @@ function renderHome() {
     state.currentStreak > 0
       ? `Longest streak: ${state.longestStreak} day${state.longestStreak === 1 ? "" : "s"}.`
       : "Show up daily to start your streak.";
+  if (elements.recoverStreakBtn) {
+    if (state.lostStreak > 0) {
+      elements.recoverStreakBtn.classList.remove("hidden");
+    } else {
+      elements.recoverStreakBtn.classList.add("hidden");
+    }
+  }
   elements.bestScoreValue.textContent = String(state.bestScore);
   elements.bestScoreFoot.textContent =
     state.gamesPlayed > 0 ? `Top score across ${state.gamesPlayed} completed games.` : "Play a round to set a record.";
@@ -712,8 +739,8 @@ function renderLeaderboard() {
 }
 
 function renderHeader() {
-  elements.headerStreakChip.textContent = `Streak ${state.currentStreak}`;
-  elements.headerCoinsChip.textContent = `Coins ${state.coins}`;
+  elements.headerStreakChip.textContent = `🔥 Streak ${state.currentStreak}`;
+  elements.headerCoinsChip.textContent = `🪙 Coins ${state.coins}`;
 }
 
 function showScreen(screenId) {
@@ -757,8 +784,15 @@ function syncDailyActivity() {
     state.currentStreak += 1;
     state.longestStreak = Math.max(state.longestStreak, state.currentStreak);
     state.lastActiveDate = today;
+    state.lostStreak = 0;
     saveState();
     return `Streak extended to ${state.currentStreak} day${state.currentStreak === 1 ? "" : "s"}.`;
+  }
+
+  if (state.currentStreak > 1 && daysSinceLastVisit === 2) {
+    state.lostStreak = state.currentStreak;
+  } else if (daysSinceLastVisit > 1) {
+    state.lostStreak = 0;
   }
 
   state.currentStreak = 1;
