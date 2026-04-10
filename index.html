@@ -8,226 +8,242 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="questions.js" defer></script>
   <script src="app.js" defer></script>
+  <style>
+    /* Spin Wheel Additional Styles */
+    .wheel {
+      position: relative;
+    }
+    .wheel-label {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 50%;
+      transform-origin: left center;
+      margin-top: -10px; /* half of line-height */
+      padding-left: 20px;
+      font-weight: bold;
+      font-size: 0.85rem;
+      color: #000;
+      text-shadow: 0 0 2px rgba(255,255,255,0.8);
+      white-space: nowrap;
+    }
+  </style>
 </head>
 
-<body>
+<body class="theme-dark">
   <main class="app-shell">
     <header class="topbar">
       <div>
         <p class="eyebrow">QUIZVERSE</p>
-        <h1 class="brand-title">BRAIN BOOSTER QUIZ</h1>
+        <h1 class="brand-title">BRAIN BOOSTER</h1>
       </div>
       <div class="topbar-status">
-        <span class="status-chip" id="header-streak-chip">🔥 Streak 0</span>
-        <span class="status-chip" id="header-coins-chip">🪙 Coins 0</span>
+        <span class="status-chip clickable" id="header-level-chip">⭐ Lvl 1</span>
+        <span class="status-chip" id="header-streak-chip">🔥 0</span>
+        <span class="status-chip" id="header-coins-chip">🪙 0</span>
       </div>
     </header>
 
+    <!-- HOME SCREEN -->
     <section class="screen is-visible" id="home-screen" aria-labelledby="home-title">
       <div class="hero-grid">
         <article class="panel hero-panel">
-          <p class="eyebrow">Daily challenge</p>
-          <h2 class="screen-title" id="home-title">Race the clock and keep the streak alive.</h2>
-          <p class="lead">
-            Answer shuffled multiple-choice questions, collect daily rewards, and climb your local
-            leaderboard with responsive, timer-based quiz rounds.
-          </p>
-
+          <p class="eyebrow">Get Started</p>
+          <h2 class="screen-title" id="home-title" style="margin-bottom:1rem;">Ready for action?</h2>
+          
           <label class="field-label" for="player-name">Player Name</label>
-          <input class="text-input" id="player-name" type="text" maxlength="24" autocomplete="off"
-            placeholder="Enter your name" />
+          <input class="text-input" id="player-name" type="text" maxlength="24" autocomplete="off" placeholder="Enter your name" />
 
-          <div class="difficulty-group" aria-label="Difficulty level">
-            <button class="difficulty-btn" type="button" data-difficulty="easy">
-              <span>Easy</span>
-              <small>20s · 10 pts</small>
-            </button>
-            <button class="difficulty-btn" type="button" data-difficulty="medium">
-              <span>Medium</span>
-              <small>15s · 15 pts</small>
-            </button>
-            <button class="difficulty-btn" type="button" data-difficulty="hard">
-              <span>Hard</span>
-              <small>12s · 20 pts</small>
-            </button>
+          <div>
+            <p class="field-label">Difficulty</p>
+            <div class="difficulty-group" aria-label="Difficulty level">
+              <button class="difficulty-btn" type="button" data-difficulty="easy">
+                <span>Easy</span><small>20s · 10 pts</small>
+              </button>
+              <button class="difficulty-btn" type="button" data-difficulty="medium">
+                <span>Medium</span><small>15s · 15 pts</small>
+              </button>
+              <button class="difficulty-btn" type="button" data-difficulty="hard">
+                <span>Hard</span><small>12s · 20 pts</small>
+              </button>
+            </div>
+            <div class="action-row" style="margin-top:1.5rem;">
+              <button class="btn btn-primary" id="start-quiz-btn" type="button">Start Quiz</button>
+              <button class="btn btn-secondary hidden" id="resume-quiz-btn" type="button">Resume Quiz</button>
+            </div>
+            <p class="micro-copy" id="home-note" style="margin-top:1rem;">Pick a difficulty to start your run.</p>
           </div>
-
-          <div class="action-row">
-            <button class="btn btn-primary" id="start-quiz-btn" type="button">Start New Quiz</button>
-            <button class="btn btn-secondary hidden" id="resume-quiz-btn" type="button">
-              Resume Quiz
-            </button>
-          </div>
-
-          <p class="micro-copy" id="home-note">
-            Pick a difficulty to see the timer and scoring rules for your next round.
-          </p>
         </article>
 
-        <aside class="panel summary-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Snapshot</p>
-              <h3 class="panel-title">Player Stats</h3>
-            </div>
+        <aside class="panel side-panel">
+          <div class="panel-heading" style="justify-content:space-between">
+            <h3 class="panel-title">🎁 Daily Hub</h3>
+            <button class="btn btn-accent btn-sm" id="spin-wheel-open-btn">🎡 Spin Wheel</button>
+          </div>
+          <div class="reward-highlight">
+            <span class="reward-amount" id="reward-amount">25 coins</span>
+            <button class="btn btn-primary" id="claim-reward-btn" type="button" style="padding: 0.5rem 1rem;">Claim</button>
+          </div>
+          
+          <div id="recent-rewards-container" style="margin-top:1.5rem;">
+             <p class="eyebrow">Recent Rewards</p>
+             <ul class="challenge-list" id="recent-rewards-list">
+               <li class="empty-state" style="padding:0.5rem;">No recent rewards.</li>
+             </ul>
           </div>
 
-          <div class="stat-grid">
-            <article class="stat-card" style="display: flex; flex-direction: column;">
-              <span class="stat-label">🔥 Current Streak</span>
-              <strong class="stat-value" id="streak-value">0 days</strong>
-              <span class="stat-foot" id="streak-foot">Show up daily to grow it.</span>
-              <button id="recover-streak-btn" class="btn btn-secondary hidden" type="button"
-                style="margin-top: 0.75rem; padding: 0.25rem; font-size: 0.8rem; flex-shrink: 0;">🔥 Recover (50
-                🪙)</button>
-            </article>
-
-            <article class="stat-card">
-              <span class="stat-label">🏆 Best Score</span>
-              <strong class="stat-value" id="best-score-value">0</strong>
-              <span class="stat-foot" id="best-score-foot">Your top run lives here.</span>
-            </article>
-
-            <article class="stat-card">
-              <span class="stat-label">🪙 Coins</span>
-              <strong class="stat-value" id="coins-value">0</strong>
-              <span class="stat-foot" id="coins-foot">Rewards and quiz bonuses stack up.</span>
-            </article>
-
-            <article class="stat-card">
-              <span class="stat-label">🎮 Games Played</span>
-              <strong class="stat-value" id="games-value">0</strong>
-              <span class="stat-foot" id="games-foot">Every completed round counts.</span>
-            </article>
+          <div id="daily-challenges-container" style="margin-top:1.5rem;">
+            <p class="eyebrow">Daily Challenges</p>
+            <ul class="challenge-list" id="challenge-list"></ul>
           </div>
         </aside>
       </div>
-
-      <div class="dashboard-grid">
-        <article class="panel reward-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Daily reward</p>
-              <h3 class="panel-title">🎁 Claim Today&apos;s Bonus</h3>
-            </div>
-            <span class="badge" id="reward-badge">Ready</span>
-          </div>
-
-          <div class="reward-highlight">
-            <span class="reward-amount" id="reward-amount">25 coins</span>
-            <button class="btn btn-accent" id="claim-reward-btn" type="button">Claim Reward</button>
-          </div>
-
-          <p class="panel-copy" id="reward-copy">
-            Daily reward amounts rise when you hit the 3, 7, and 15 day streak milestones.
-          </p>
-          <p class="micro-copy" id="reward-meta">You can claim once per day.</p>
-        </article>
-
-        <article class="panel leaderboard-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Leaderboard</p>
-              <h3 class="panel-title">🏅 Local Hall of Fame</h3>
-            </div>
-          </div>
-          <div class="leaderboard-list" id="leaderboard-list"></div>
-        </article>
-      </div>
     </section>
 
+    <!-- QUIZ SCREEN -->
     <section class="screen" id="quiz-screen" hidden aria-labelledby="question-text">
       <article class="panel quiz-panel">
         <div class="quiz-top">
           <div>
             <p class="eyebrow" id="question-category">Category</p>
-            <h2 class="question-text" id="question-text">Question text appears here.</h2>
+            <h2 class="question-text" id="question-text">Question text</h2>
           </div>
-
           <div class="timer-shell" id="timer-shell">
-            <span class="timer-label">Time Left</span>
+            <span class="timer-label">Time</span>
             <strong class="timer-value" id="timer-value">20s</strong>
-            <div class="timer-track">
-              <div class="timer-fill" id="timer-bar"></div>
-            </div>
+            <div class="timer-track"><div class="timer-fill" id="timer-bar"></div></div>
           </div>
         </div>
 
         <div class="status-row">
           <span class="status-chip" id="quiz-score-chip">Score 0</span>
-          <span class="status-chip" id="quiz-progress-chip">Question 1 / 6</span>
-          <span class="status-chip" id="quiz-difficulty-chip">Easy</span>
+          <span class="status-chip" id="quiz-progress-chip">1 / 6</span>
         </div>
 
-        <div class="progress-block" aria-label="Quiz progress">
-          <div class="progress-track">
-            <div class="progress-fill" id="quiz-progress-bar"></div>
-          </div>
+        <div class="progress-block">
+          <div class="progress-track"><div class="progress-fill" id="quiz-progress-bar"></div></div>
         </div>
 
         <div class="options-grid" id="options-container"></div>
+        
+        <div class="powerups-row" style="margin-top:1.5rem; display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap;">
+          <button class="btn btn-secondary power-btn" id="pu-5050" data-type="5050">🌗 50/50 (<span id="count-5050">0</span>)</button>
+          <button class="btn btn-secondary power-btn" id="pu-skip" data-type="skip">⏭️ Skip (<span id="count-skip">0</span>)</button>
+          <button class="btn btn-secondary power-btn" id="pu-time" data-type="time">⌛ +10s (<span id="count-time">0</span>)</button>
+          <button class="btn btn-secondary power-btn" id="pu-hint" data-type="hint" style="margin-left:auto;">💡 Hint (15🪙)</button>
+        </div>
 
-        <div class="feedback-row">
-          <p class="feedback-text" id="feedback-text">Choose the best answer before the timer runs out.</p>
-          <button class="btn btn-ghost" id="pause-quiz-btn" type="button">Pause Quiz</button>
+        <div class="feedback-row" style="margin-top:1rem;">
+           <p class="feedback-text" id="feedback-text">Choose the best answer.</p>
+           <button class="btn btn-ghost" id="pause-quiz-btn" type="button">Pause</button>
         </div>
       </article>
     </section>
 
-    <section class="screen" id="result-screen" hidden aria-labelledby="result-heading">
+    <!-- RESULT SCREEN -->
+    <section class="screen" id="result-screen" hidden>
       <div class="result-grid">
         <article class="panel result-main">
-          <p class="eyebrow">Round complete</p>
+          <p class="eyebrow" id="result-subtitle">Round complete</p>
           <h2 class="screen-title" id="result-heading">Sharp run.</h2>
-          <p class="lead" id="result-summary">Your final score and performance summary will show up here.</p>
-
-          <div class="score-display">
-            <span class="score-caption">Final Score</span>
-            <strong class="score-value" id="result-score">0</strong>
-            <span class="badge" id="result-performance-tag">Steady</span>
+          <p class="lead" id="result-summary">Summary here.</p>
+          
+          <div class="score-display" style="display:flex; justify-content:space-around; align-items:center;">
+             <div style="text-align:center;">
+               <span class="score-caption">Score</span>
+               <strong class="score-value" id="result-score" style="display:block;">0</strong>
+             </div>
+             <div style="text-align:center;">
+               <span class="score-caption">XP Earned</span>
+               <strong class="score-value" id="result-xp" style="display:block; color:var(--success);">+0</strong>
+             </div>
           </div>
 
-          <div class="result-stat-grid">
-            <article class="stat-card compact">
-              <span class="stat-label">Accuracy</span>
-              <strong class="stat-value" id="result-accuracy">0%</strong>
-            </article>
-            <article class="stat-card compact">
-              <span class="stat-label">Correct Answers</span>
-              <strong class="stat-value" id="result-correct">0 / 0</strong>
-            </article>
-            <article class="stat-card compact">
-              <span class="stat-label">Bonus Coins</span>
-              <strong class="stat-value" id="result-bonus">+0</strong>
-            </article>
-            <article class="stat-card compact">
-              <span class="stat-label">Current Streak</span>
-              <strong class="stat-value" id="result-streak">0 days</strong>
-            </article>
+          <div class="xp-bar-container clickable nav-trigger" data-target="profile-screen" id="result-xp-container" style="margin: 1.5rem 0; padding:1rem; border-radius:var(--radius-md); background:rgba(255,255,255,0.05); border:1px solid var(--line);">
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
+               <strong id="result-level-start">Level 1</strong>
+               <span id="result-level-end" style="color:var(--text-muted);">Level 2</span>
+            </div>
+            <div class="progress-track"><div class="progress-fill" id="xp-progress-bar" style="background:var(--success); width:50%"></div></div>
+            <p class="micro-copy" id="result-xp-remaining" style="margin-top:0.5rem; text-align:center;">Click for full profile view &gt;</p>
           </div>
 
-          <div class="action-row">
-            <button class="btn btn-primary" id="play-again-btn" type="button">Play Again</button>
-            <button class="btn btn-secondary" id="result-home-btn" type="button">Back Home</button>
+          <div class="action-row" style="margin-top:1.5rem">
+            <button class="btn btn-primary" id="play-again-btn">Play Again</button>
+            <button class="btn btn-secondary nav-trigger" data-target="home-screen">Home</button>
           </div>
         </article>
 
         <article class="panel review-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Breakdown</p>
-              <h3 class="panel-title">Question Review</h3>
-            </div>
-          </div>
-
-          <div class="result-breakdown" id="result-breakdown"></div>
-          <div class="answer-review" id="answer-review"></div>
+          <h3 class="panel-title">Review</h3>
+          <div class="answer-review" id="answer-review" style="max-height: 400px; overflow-y:auto; margin-top:1rem; padding-right:0.5rem;"></div>
         </article>
       </div>
     </section>
+
+
+
   </main>
+
+  <nav class="bottom-nav" style="justify-content: center; gap: 4rem;">
+     <button class="nav-btn is-active nav-trigger" data-target="home-screen">🏠 Home</button>
+  </nav>
+
+  <!-- SPIN WHEEL MODAL -->
+  <div id="spin-modal" class="modal-overlay hidden">
+     <div class="modal-content panel text-center">
+        <h2 id="spin-title">Daily Spin Wheel</h2>
+        <p class="micro-copy mb-1" id="spin-status">Test your luck for extra rewards!</p>
+        
+        <div id="wheel-view">
+           <div class="wheel-container">
+              <div class="pointer" style="text-shadow: 0 0 10px #000;">⬇</div>
+              <div class="wheel" id="spin-wheel">
+                  <!-- Labels inserted dynamically via JS -->
+              </div>
+           </div>
+           <button class="btn btn-primary" id="spin-btn" style="margin-top:1.5rem; width:100%;">SPIN WHEEL</button>
+           <button class="btn btn-ghost" id="close-spin-btn" style="margin-top:0.5rem; width:100%;">Cancel</button>
+        </div>
+
+        <div id="reward-view" class="hidden" style="padding: 2rem 0; animation: rise-in 0.4s ease;">
+           <div style="font-size: 4rem; margin-bottom:1rem;" id="reward-icon">🎉</div>
+           <h3 style="color:var(--brand); font-size:1.5rem; margin-bottom: 0.5rem;">Congratulations!</h3>
+           <p style="font-size: 1.2rem; margin-bottom: 2rem; font-weight:bold; color:var(--success);" id="reward-text">You won 50 Coins!</p>
+           <button class="btn btn-primary" id="collect-reward-btn" style="width:100%;">Collect Reward</button>
+        </div>
+
+     </div>
+  </div>
+
+  <!-- LEVEL & XP MODAL -->
+  <div id="level-xp-modal" class="modal-overlay hidden">
+     <div class="modal-content panel">
+        <h2 class="panel-title" style="text-align:center; margin-bottom: 1.5rem;">Level Progress</h2>
+        <div style="text-align:center; margin-bottom:1rem;">
+           <div class="avatar-ring" style="width:80px; height:80px;">
+              <div class="avatar-circle" id="modal-level-display" style="font-size: 1.5rem; font-weight:bold;">Lvl 5</div>
+           </div>
+        </div>
+        
+        <div class="xp-bar-container" style="background:rgba(255,255,255,0.05); padding: 1.25rem; border-radius: var(--radius-md); border:1px solid var(--line);">
+           <div style="display:flex; justify-content:space-between; margin-bottom:0.75rem; font-weight:bold;">
+              <span style="color:var(--brand);" id="modal-xp-current">120 XP</span>
+              <span style="color:var(--text-muted);" id="modal-xp-req">200 XP</span>
+           </div>
+           <div class="progress-track" style="height:14px;">
+              <div class="progress-fill" id="modal-xp-bar" style="background:linear-gradient(90deg, var(--brand), var(--success)); width:60%;"></div>
+           </div>
+           <div style="text-align:center; margin-top:1rem; color:var(--text-muted); font-size: 0.95rem;">
+              [<span id="modal-xp-visual-ratio">120 / 200 XP</span>]
+           </div>
+        </div>
+        
+        <p style="text-align:center; font-weight:bold; margin-top:1.5rem; color:var(--accent-soft);" id="modal-xp-remaining">80 XP needed to reach next level</p>
+
+        <button class="btn btn-primary" id="close-level-modal-btn" style="width:100%; margin-top:1.5rem;">Continue</button>
+     </div>
+  </div>
 
   <div class="toast" id="toast" aria-live="polite"></div>
 </body>
-
 </html>

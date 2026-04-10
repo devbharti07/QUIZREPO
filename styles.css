@@ -814,3 +814,154 @@ body::after {
     grid-template-columns: 1fr;
   }
 }
+
+/* NEW GAMIFICATION UI STYLES */
+
+body.theme-light {
+  --bg-base: #f0f4f8;
+  --bg-panel: rgba(255, 255, 255, 0.95);
+  --bg-panel-strong: #ffffff;
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --text-deep: #0f172a;
+  --line: rgba(15, 23, 42, 0.1);
+  background: #f0f4f8;
+  color: var(--text-main);
+}
+body.theme-light .btn-secondary { background: rgba(15, 23, 42, 0.05); color: var(--text-main); border-color: rgba(15, 23, 42, 0.1); }
+body.theme-light .stat-card, body.theme-light .panel { border-color: var(--line); }
+
+body.theme-neon {
+  --bg-base: #000000;
+  --bg-panel: rgba(10, 10, 15, 0.9);
+  --bg-panel-strong: #0a0a0f;
+  --text-main: #ff00ff;
+  --text-muted: #aaaaaa;
+  --text-deep: #ffff00;
+  --brand: #00ffff;
+  --accent: #ff00ff;
+  --line: rgba(0, 255, 255, 0.3);
+  background: #000;
+}
+body.theme-neon .btn-primary { box-shadow: 0 0 15px var(--brand); }
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--bg-panel-strong);
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-around;
+  padding: 0.5rem;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+.nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.nav-btn.is-active, .nav-btn:hover {
+  color: var(--brand);
+}
+@media (min-width: 621px) {
+  .app-shell { margin-bottom: 4rem; } 
+}
+
+.profile-grid { display: grid; gap: 1.5rem; grid-template-columns: 1fr 2fr; }
+@media(max-width: 800px){ .profile-grid { grid-template-columns: 1fr;} }
+.avatar-ring { 
+  width: 100px; height: 100px; 
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand), var(--accent));
+  padding: 4px; margin: 0 auto;
+}
+.avatar-circle {
+  width: 100%; height: 100%; 
+  background: var(--bg-panel);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 3rem;
+}
+
+.store-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 1rem; border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 1rem;
+}
+
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.8);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.modal-overlay.hidden { display: none !important; }
+.modal-content {
+  width: 90%; max-width: 400px;
+  position: relative;
+}
+
+/* Spin Wheel Styles */
+.wheel-container {
+  position: relative;
+  width: 250px; height: 250px;
+  margin: 1rem auto;
+}
+.wheel {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  background: conic-gradient(
+    #ff9661 0deg 60deg, 
+    #ffd06b 60deg 120deg, 
+    #7ee081 120deg 180deg, 
+    #58d5bf 180deg 240deg, 
+    #1e8e8d 240deg 300deg, 
+    #ff7b73 300deg 360deg
+  );
+  border: 4px solid #fff;
+  transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+}
+.pointer {
+  position: absolute;
+  top: -10px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 2rem; color: #fff;
+  z-index: 10;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.mode-tabs {
+  display: flex; gap: 0.5rem; background: rgba(255,255,255,0.05); padding: 0.25rem; border-radius: var(--radius-md);
+}
+.mode-tab {
+  flex: 1; background: none; border: none; color: var(--text-muted);
+  padding: 0.5rem; text-align: center; border-radius: var(--radius-md); cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.mode-tab.is-active {
+  background: var(--brand); color: #000; font-weight: bold;
+}
+.mb-1 { margin-bottom: 1rem; }
+.text-center { text-align: center; }
+
+.achievement-badge {
+  text-align: center; padding: 1rem; border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  opacity: 0.5; filter: grayscale(1);
+}
+.achievement-badge.unlocked {
+  opacity: 1; filter: none; border-color: var(--brand); background: rgba(88, 213, 191, 0.1);
+}
+.achievement-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+.achievement-name { font-size: 0.8rem; font-weight: bold; }
+.challenge-list { list-style: none; padding:0; margin:0;}
+.challenge-item { padding: 0.75rem; border: 1px solid var(--line); border-radius: var(--radius-md); margin-bottom: 0.5rem; display: flex; justify-content: space-between;}
+.challenge-info span {display: block;}
+.challenge-reward { color: var(--accent-soft); font-weight: bold; }

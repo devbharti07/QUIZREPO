@@ -1,13 +1,8 @@
-const STORAGE_KEY = "pulsequiz-arena-state-v1";
+const STORAGE_KEY = "pulsequiz-arena-state-advanced";
 const QUESTIONS_PER_ROUND = 6;
 const DAILY_REWARD_BASE = 25;
 const FEEDBACK_DELAY_MS = 900;
-const MAX_LEADERBOARD_ENTRIES = 8;
-const STREAK_BONUSES = {
-  3: 35,
-  7: 80,
-  15: 180,
-};
+const STREAK_BONUSES = { 3: 35, 7: 80, 15: 180 };
 
 const DIFFICULTY_CONFIG = {
   easy: { label: "Easy", timeLimit: 20, points: 10 },
@@ -15,24 +10,43 @@ const DIFFICULTY_CONFIG = {
   hard: { label: "Hard", timeLimit: 12, points: 20 },
 };
 
+const SPIN_REWARDS = [
+  { text: "100 Coins", coins: 100, xp: 0, p50: 0, pSkip: 0, pTime: 0, icon: "🪙" },
+  { text: "50 XP", coins: 0, xp: 50, p50: 0, pSkip: 0, pTime: 0, icon: "⭐" },
+  { text: "1x Skip", coins: 0, xp: 0, p50: 0, pSkip: 1, pTime: 0, icon: "⏭️" },
+  { text: "50 Coins", coins: 50, xp: 0, p50: 0, pSkip: 0, pTime: 0, icon: "🪙" },
+  { text: "20 XP", coins: 0, xp: 20, p50: 0, pSkip: 0, pTime: 0, icon: "⭐" },
+  { text: "2x 50/50", coins: 0, xp: 0, p50: 2, pSkip: 0, pTime: 0, icon: "🌗" },
+];
+let currentSpinReward = null;
+
 const DEFAULT_STATE = {
   playerName: "",
+  profilePic: null, // base64 string
   preferredDifficulty: "medium",
   currentStreak: 0,
   longestStreak: 0,
   lostStreak: 0,
   lastActiveDate: null,
   lastClaimDate: null,
-  coins: 0,
+  coins: 100,
   gamesPlayed: 0,
   bestScore: 0,
+  totalScore: 0,
   totalCorrectAnswers: 0,
   totalQuestionsAnswered: 0,
   rewardHistory: [],
-  leaderboard: [],
+  recentRewards: [],
   activeQuiz: null,
   lastResult: null,
   seenQuestions: { easy: [], medium: [], hard: [] },
+  xp: 0,
+  level: 1,
+  powerUps: { "5050": 0, "skip": 0, "time": 0 },
+  activeTheme: "dark",
+  achievements: {},
+  lastSpinDate: null,
+  categoryStats: {}
 };
 
 const elements = {};
@@ -48,16 +62,12 @@ document.addEventListener("DOMContentLoaded", initializeApp);
 function initializeApp() {
   cacheElements();
   state = loadState();
-
+  applyTheme(state.activeTheme);
   const streakMessage = syncDailyActivity();
-
+  
   bindEvents();
   renderHeader();
   renderHome();
-
-  if (state.lastResult) {
-    renderResult();
-  }
 
   if (state.activeQuiz) {
     showToast("An unfinished quiz is saved and ready to resume.", "accent");
@@ -73,22 +83,16 @@ function cacheElements() {
   elements.startQuizBtn = document.getElementById("start-quiz-btn");
   elements.resumeQuizBtn = document.getElementById("resume-quiz-btn");
   elements.homeNote = document.getElementById("home-note");
+  
+  elements.headerLevelChip = document.getElementById("header-level-chip");
   elements.headerStreakChip = document.getElementById("header-streak-chip");
   elements.headerCoinsChip = document.getElementById("header-coins-chip");
-  elements.streakValue = document.getElementById("streak-value");
-  elements.streakFoot = document.getElementById("streak-foot");
-  elements.bestScoreValue = document.getElementById("best-score-value");
-  elements.bestScoreFoot = document.getElementById("best-score-foot");
-  elements.coinsValue = document.getElementById("coins-value");
-  elements.coinsFoot = document.getElementById("coins-foot");
-  elements.gamesValue = document.getElementById("games-value");
-  elements.gamesFoot = document.getElementById("games-foot");
-  elements.rewardBadge = document.getElementById("reward-badge");
+
+  elements.navTriggers = Array.from(document.querySelectorAll(".nav-trigger"));
   elements.rewardAmount = document.getElementById("reward-amount");
-  elements.rewardCopy = document.getElementById("reward-copy");
-  elements.rewardMeta = document.getElementById("reward-meta");
   elements.claimRewardBtn = document.getElementById("claim-reward-btn");
-  elements.leaderboardList = document.getElementById("leaderboard-list");
+  elements.recentRewardsList = document.getElementById("recent-rewards-list");
+
   elements.questionCategory = document.getElementById("question-category");
   elements.questionText = document.getElementById("question-text");
   elements.timerShell = document.getElementById("timer-shell");
@@ -96,407 +100,318 @@ function cacheElements() {
   elements.timerBar = document.getElementById("timer-bar");
   elements.quizScoreChip = document.getElementById("quiz-score-chip");
   elements.quizProgressChip = document.getElementById("quiz-progress-chip");
-  elements.quizDifficultyChip = document.getElementById("quiz-difficulty-chip");
   elements.quizProgressBar = document.getElementById("quiz-progress-bar");
   elements.optionsContainer = document.getElementById("options-container");
   elements.feedbackText = document.getElementById("feedback-text");
   elements.pauseQuizBtn = document.getElementById("pause-quiz-btn");
+
   elements.resultHeading = document.getElementById("result-heading");
   elements.resultSummary = document.getElementById("result-summary");
   elements.resultScore = document.getElementById("result-score");
-  elements.resultPerformanceTag = document.getElementById("result-performance-tag");
-  elements.resultAccuracy = document.getElementById("result-accuracy");
-  elements.resultCorrect = document.getElementById("result-correct");
-  elements.resultBonus = document.getElementById("result-bonus");
-  elements.resultStreak = document.getElementById("result-streak");
-  elements.resultBreakdown = document.getElementById("result-breakdown");
+  elements.resultXp = document.getElementById("result-xp");
+  elements.xpProgressBar = document.getElementById("xp-progress-bar");
+  elements.levelDisplayStart = document.getElementById("result-level-start");
+  elements.levelDisplayEnd = document.getElementById("result-level-end");
   elements.answerReview = document.getElementById("answer-review");
   elements.playAgainBtn = document.getElementById("play-again-btn");
-  elements.resultHomeBtn = document.getElementById("result-home-btn");
+
+  // Level Modal
+  elements.levelXpModal = document.getElementById("level-xp-modal");
+  elements.modalLevelDisplay = document.getElementById("modal-level-display");
+  elements.modalXpCurrent = document.getElementById("modal-xp-current");
+  elements.modalXpReq = document.getElementById("modal-xp-req");
+  elements.modalXpBar = document.getElementById("modal-xp-bar");
+  elements.modalXpVisualRatio = document.getElementById("modal-xp-visual-ratio");
+  elements.modalXpRemaining = document.getElementById("modal-xp-remaining");
+  elements.closeLevelModalBtn = document.getElementById("close-level-modal-btn");
+  
   elements.toast = document.getElementById("toast");
-  elements.recoverStreakBtn = document.getElementById("recover-streak-btn");
+  elements.powerBtns = Array.from(document.querySelectorAll(".power-btn"));
+  
+  // Spin Wheel Modals
+  elements.spinModal = document.getElementById("spin-modal");
+  elements.spinWheel = document.getElementById("spin-wheel");
+  elements.spinBtn = document.getElementById("spin-btn");
+  elements.closeSpinBtn = document.getElementById("close-spin-btn");
+  elements.spinWheelOpenBtn = document.getElementById("spin-wheel-open-btn");
+  elements.wheelView = document.getElementById("wheel-view");
+  elements.rewardView = document.getElementById("reward-view");
+  elements.rewardIcon = document.getElementById("reward-icon");
+  elements.rewardText = document.getElementById("reward-text");
+  elements.collectRewardBtn = document.getElementById("collect-reward-btn");
 }
 
 function bindEvents() {
   elements.playerName.addEventListener("input", handlePlayerNameChange);
-  elements.difficultyButtons.forEach((button) => {
-    button.addEventListener("click", () => setPreferredDifficulty(button.dataset.difficulty));
+  
+  elements.difficultyButtons.forEach((btn) => {
+    btn.addEventListener("click", () => setPreferredDifficulty(btn.dataset.difficulty));
   });
-  elements.startQuizBtn.addEventListener("click", startNewQuiz);
+
+  elements.navTriggers.forEach(btn => {
+    btn.addEventListener("click", () => showScreen(btn.dataset.target));
+  });
+
+  elements.startQuizBtn.addEventListener("click", () => startNewQuiz());
   elements.resumeQuizBtn.addEventListener("click", resumeQuiz);
+  
   elements.claimRewardBtn.addEventListener("click", claimDailyReward);
   elements.optionsContainer.addEventListener("click", handleOptionSelection);
   elements.pauseQuizBtn.addEventListener("click", pauseQuiz);
   elements.playAgainBtn.addEventListener("click", playAgain);
-  elements.resultHomeBtn.addEventListener("click", goHome);
-  if (elements.recoverStreakBtn) {
-    elements.recoverStreakBtn.addEventListener("click", recoverStreak);
-  }
+
+  elements.powerBtns.forEach(btn => btn.addEventListener("click", () => handlePowerUpUse(btn.dataset.type)));
+  elements.headerLevelChip.addEventListener("click", openLevelModal);
+  if(elements.closeLevelModalBtn) elements.closeLevelModalBtn.addEventListener("click", () => elements.levelXpModal.classList.add("hidden"));
+
+  // Spin Wheel setup
+  elements.spinWheelOpenBtn.addEventListener("click", openSpinWheel);
+  elements.closeSpinBtn.addEventListener("click", () => elements.spinModal.classList.add("hidden"));
+  elements.spinBtn.addEventListener("click", spinWheelAction);
+  elements.collectRewardBtn.addEventListener("click", collectSpinReward);
+
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("beforeunload", saveState);
 }
 
-function handlePlayerNameChange(event) {
-  state.playerName = sanitizeName(event.target.value);
-  saveState();
-  renderHeader();
+function applyTheme(themeName) { document.body.className = `theme-${themeName}`; }
+
+function addRecentReward(text) {
+  state.recentRewards.unshift({ text, date: Date.now() });
+  state.recentRewards = state.recentRewards.slice(0, 3);
+  saveState(); renderRecentRewards();
 }
 
-function handleVisibilityChange() {
-  if (document.hidden) {
-    clearTimers();
-    saveState();
+function renderRecentRewards() {
+  if (!elements.recentRewardsList) return;
+  if (!state.recentRewards || state.recentRewards.length === 0) {
+    elements.recentRewardsList.innerHTML = `<li class="empty-state" style="padding:0.5rem; text-align:center;">No recent rewards.</li>`; return;
+  }
+  elements.recentRewardsList.innerHTML = "";
+  state.recentRewards.forEach(r => {
+    const d = new Date(r.date);
+    const timeStr = `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+    elements.recentRewardsList.innerHTML += `<li class="challenge-item"><div class="challenge-info"><span class="challenge-reward">${r.text}</span><span class="micro-copy" style="font-size:0.75rem">${timeStr}</span></div></li>`;
+  });
+}
+
+function handlePowerUpUse(type) {
+  const quiz = state.activeQuiz;
+  if (!quiz || quiz.questionResolved) return;
+  
+  if (type === "hint") {
+    if (state.coins >= 15) {
+      state.coins -= 15; saveState(); renderHeader();
+      const currentQ = quiz.questions[quiz.currentIndex];
+      const btns = Array.from(elements.optionsContainer.querySelectorAll(".option-btn"));
+      const correctBtn = btns.find(b => b.dataset.option === currentQ.answer);
+      if (correctBtn) {
+        correctBtn.style.boxShadow = "0 0 10px var(--brand)";
+        setTimeout(()=> correctBtn.style.boxShadow = "", 1500);
+      }
+    } else {
+      showToast("Not enough coins for Hint. Need 15🪙.", "warning");
+    }
     return;
   }
 
-  if (currentScreenId === "quiz-screen" && state.activeQuiz) {
-    renderQuiz();
+  if (state.powerUps[type] <= 0) return;
+
+  state.powerUps[type] -= 1; saveState();
+
+  if (type === "5050") {
+    const currentQ = quiz.questions[quiz.currentIndex];
+    const btns = Array.from(elements.optionsContainer.querySelectorAll(".option-btn"));
+    const incorrectBtns = btns.filter(b => b.dataset.option !== currentQ.answer);
+    const toRemove = shuffleArray(incorrectBtns).slice(0, 2);
+    toRemove.forEach(b => { b.style.opacity = "0.2"; b.disabled = true; });
+  } else if (type === "time") {
+    quiz.questionStartedAt += 10000; saveState();
+  } else if (type === "skip") {
+    resolveQuestion(null, "skip");
   }
+  updatePowerUpBadges();
+}
+
+function updatePowerUpBadges() {
+  const c50 = document.getElementById("count-5050"); if (c50) c50.textContent = state.powerUps["5050"] || 0;
+  const cs = document.getElementById("count-skip"); if (cs) cs.textContent = state.powerUps["skip"] || 0;
+  const ct = document.getElementById("count-time"); if (ct) ct.textContent = state.powerUps["time"] || 0;
+  
+  const p50 = document.getElementById("pu-5050"); if(p50) p50.disabled = state.powerUps["5050"] === 0;
+  const ps = document.getElementById("pu-skip"); if(ps) ps.disabled = state.powerUps["skip"] === 0;
+  const pt = document.getElementById("pu-time"); if(pt) pt.disabled = state.powerUps["time"] === 0;
+}
+
+function handlePlayerNameChange(event) { state.playerName = sanitizeName(event.target.value); saveState(); }
+function handleVisibilityChange() {
+  if (document.hidden) { clearTimers(); saveState(); return; }
+  if (currentScreenId === "quiz-screen" && state.activeQuiz) renderQuiz();
 }
 
 function setPreferredDifficulty(difficulty) {
-  if (!DIFFICULTY_CONFIG[difficulty]) {
-    return;
-  }
-
+  if (!DIFFICULTY_CONFIG[difficulty]) return;
   state.preferredDifficulty = difficulty;
-  saveState();
-  renderHome();
+  saveState(); renderHome();
 }
 
 function startNewQuiz() {
   const difficulty = state.preferredDifficulty;
   const fullPool = window.QUIZ_QUESTIONS.filter((question) => question.difficulty === difficulty);
-
   let questionPool = fullPool.filter((q) => !state.seenQuestions[difficulty].includes(q.id));
+  
+  let roundCount = QUESTIONS_PER_ROUND;
+  if (questionPool.length < roundCount) { state.seenQuestions[difficulty] = []; questionPool = fullPool; }
 
-  if (questionPool.length < QUESTIONS_PER_ROUND) {
-    if (fullPool.length < QUESTIONS_PER_ROUND) {
-      showToast("Not enough questions found for that difficulty.", "warning");
-      return;
-    }
-    state.seenQuestions[difficulty] = [];
-    questionPool = fullPool;
-  }
-
-  const selectedQuestions = shuffleArray(questionPool).slice(0, QUESTIONS_PER_ROUND);
-
+  const selectedQuestions = shuffleArray(questionPool).slice(0, roundCount);
   selectedQuestions.forEach(q => state.seenQuestions[difficulty].push(q.id));
 
-  const questions = selectedQuestions.map((question) => ({
-      id: question.id,
-      prompt: question.prompt,
-      category: question.category,
-      difficulty: question.difficulty,
-      answer: question.answer,
-      options: shuffleArray(question.options.slice()),
-    }));
+  const questions = selectedQuestions.map((q) => ({
+      id: q.id, prompt: q.prompt, category: q.category, difficulty: q.difficulty,
+      answer: q.answer, options: shuffleArray(q.options.slice()),
+  }));
 
   state.activeQuiz = {
-    difficulty,
-    questions,
-    currentIndex: 0,
-    score: 0,
-    correctCount: 0,
-    wrongCount: 0,
-    answers: [],
-    startedAt: Date.now(),
-    questionStartedAt: Date.now(),
-    questionResolved: false,
-    selectedOption: null,
-    resolutionType: null,
-    advanceAfterAt: null,
+    difficulty, questions, currentIndex: 0, score: 0, correctCount: 0, wrongCount: 0,
+    answers: [], startedAt: Date.now(), questionStartedAt: Date.now(),
+    questionResolved: false, selectedOption: null, resolutionType: null, advanceAfterAt: null
   };
 
-  saveState();
-  ensureAudioContext();
-  showScreen("quiz-screen");
-  renderQuiz();
+  saveState(); ensureAudioContext(); showScreen("quiz-screen"); renderQuiz();
 }
 
 function resumeQuiz() {
-  if (!state.activeQuiz) {
-    showToast("There is no saved quiz to resume right now.", "warning");
-    return;
-  }
-
-  ensureAudioContext();
-  showScreen("quiz-screen");
-  renderQuiz();
+  if (!state.activeQuiz) return;
+  ensureAudioContext(); showScreen("quiz-screen"); renderQuiz();
 }
 
 function pauseQuiz() {
-  if (!state.activeQuiz) {
-    return;
-  }
-
-  clearTimers();
-  saveState();
-  showScreen("home-screen");
-  renderHome();
-  showToast("Quiz paused. You can resume it any time.", "accent");
+  if (!state.activeQuiz) return;
+  clearTimers(); saveState(); showScreen("home-screen"); renderHome();
+  showToast("Quiz paused. You can resume later.", "accent");
 }
-
-function playAgain() {
-  if (state.lastResult && state.lastResult.difficulty) {
-    state.preferredDifficulty = state.lastResult.difficulty;
-    saveState();
-  }
-
-  renderHome();
-  startNewQuiz();
-}
-
-function goHome() {
-  clearTimers();
-  showScreen("home-screen");
-  renderHome();
-}
-
-function recoverStreak() {
-  if (state.lostStreak > 0 && state.coins >= 50) {
-    state.coins -= 50;
-    state.currentStreak = state.lostStreak + 1;
-    state.longestStreak = Math.max(state.longestStreak, state.currentStreak);
-    state.lostStreak = 0;
-    saveState();
-    renderHeader();
-    renderHome();
-    showToast("Streak recovered successfully!", "success");
-  } else if (state.coins < 50) {
-    showToast("Not enough coins to recover streak. Need 50 coins.", "warning");
-  }
-}
+function playAgain() { showScreen("home-screen"); }
+function goHome() { clearTimers(); showScreen("home-screen"); renderHome(); }
 
 function handleOptionSelection(event) {
   const button = event.target.closest(".option-btn");
-
-  if (!button || !state.activeQuiz || state.activeQuiz.questionResolved) {
-    return;
-  }
-
+  if (!button || !state.activeQuiz || state.activeQuiz.questionResolved) return;
   resolveQuestion(button.dataset.option, "answered");
 }
 
 function resolveQuestion(selectedOption, resolutionType) {
   const quiz = state.activeQuiz;
-
-  if (!quiz || quiz.questionResolved) {
-    return;
-  }
-
+  if (!quiz || quiz.questionResolved) return;
   clearTimers();
 
   const currentQuestion = quiz.questions[quiz.currentIndex];
-  const isCorrect = selectedOption === currentQuestion.answer;
+  const isCorrect = (resolutionType !== "skip") && (selectedOption === currentQuestion.answer);
 
   if (isCorrect) {
-    quiz.score += DIFFICULTY_CONFIG[quiz.difficulty].points;
-    quiz.correctCount += 1;
-  } else {
+    const pts = DIFFICULTY_CONFIG[quiz.difficulty].points;
+    quiz.score += pts; quiz.correctCount += 1;
+    const cat = currentQuestion.category;
+    if (!state.categoryStats[cat]) state.categoryStats[cat] = { correct:0, total:0 };
+    state.categoryStats[cat].correct += 1;
+  } else if (resolutionType !== "skip") {
     quiz.wrongCount += 1;
+  }
+  
+  if(resolutionType !== "skip"){
+    const cat = currentQuestion.category;
+    if (!state.categoryStats[cat]) state.categoryStats[cat] = { correct:0, total:0 };
+    state.categoryStats[cat].total += 1;
   }
 
   quiz.answers.push({
-    prompt: currentQuestion.prompt,
-    category: currentQuestion.category,
-    selectedOption,
-    correctAnswer: currentQuestion.answer,
-    isCorrect,
-    resolutionType,
+    prompt: currentQuestion.prompt, category: currentQuestion.category,
+    selectedOption, correctAnswer: currentQuestion.answer, isCorrect, resolutionType,
   });
 
-  quiz.questionResolved = true;
-  quiz.selectedOption = selectedOption;
+  quiz.questionResolved = true; quiz.selectedOption = selectedOption;
   quiz.resolutionType = resolutionType;
-  quiz.advanceAfterAt = Date.now() + FEEDBACK_DELAY_MS;
+  quiz.advanceAfterAt = Date.now() + (resolutionType === "skip" ? 200 : FEEDBACK_DELAY_MS);
 
   saveState();
-  playOutcomeSound(isCorrect, resolutionType);
+  if(resolutionType !== "skip") playOutcomeSound(isCorrect, resolutionType);
   renderQuiz();
 }
 
 function renderHome() {
-  const displayName = getPlayerName();
-  const difficulty = DIFFICULTY_CONFIG[state.preferredDifficulty];
   const rewardDetails = getDailyRewardDetails();
   const hasSavedQuiz = Boolean(state.activeQuiz);
 
-  elements.playerName.value = state.playerName;
-  elements.streakValue.textContent = `${state.currentStreak} day${state.currentStreak === 1 ? "" : "s"}`;
-  elements.streakFoot.textContent =
-    state.currentStreak > 0
-      ? `Longest streak: ${state.longestStreak} day${state.longestStreak === 1 ? "" : "s"}.`
-      : "Show up daily to start your streak.";
-  if (elements.recoverStreakBtn) {
-    if (state.lostStreak > 0) {
-      elements.recoverStreakBtn.classList.remove("hidden");
-    } else {
-      elements.recoverStreakBtn.classList.add("hidden");
-    }
-  }
-  elements.bestScoreValue.textContent = String(state.bestScore);
-  elements.bestScoreFoot.textContent =
-    state.gamesPlayed > 0 ? `Top score across ${state.gamesPlayed} completed games.` : "Play a round to set a record.";
-  elements.coinsValue.textContent = String(state.coins);
-  elements.coinsFoot.textContent =
-    state.rewardHistory.length > 0 ? `Last reward: ${state.rewardHistory[0].amount} coins.` : "Daily rewards and quiz bonuses stack up.";
-  elements.gamesValue.textContent = String(state.gamesPlayed);
-  elements.gamesFoot.textContent =
-    state.totalQuestionsAnswered > 0
-      ? `${state.totalCorrectAnswers} correct answers total.`
-      : "Every completed round counts.";
-  elements.homeNote.textContent = hasSavedQuiz
-    ? `Saved quiz ready: question ${state.activeQuiz.currentIndex + 1} of ${state.activeQuiz.questions.length} on ${
-        DIFFICULTY_CONFIG[state.activeQuiz.difficulty].label
-      }.`
-    : `${displayName}, ${difficulty.label} gives you ${difficulty.timeLimit} seconds per question and ${difficulty.points} points for each correct answer.`;
-  elements.rewardAmount.textContent = `${rewardDetails.amount} coins`;
-  elements.rewardBadge.textContent = rewardDetails.claimed
-    ? "Claimed"
-    : rewardDetails.bonus > 0
-      ? `${state.currentStreak}-day bonus`
-      : "Ready";
-  elements.rewardCopy.textContent = rewardDetails.claimed
-    ? "Today's reward is already claimed. Come back tomorrow to keep the streak hot."
-    : rewardDetails.bonus > 0
-      ? `Your current streak unlocks a bonus of ${rewardDetails.bonus} extra coins today.`
-      : "Milestone bonuses unlock at 3, 7, and 15 days.";
-  elements.rewardMeta.textContent = rewardDetails.claimed
-    ? buildRewardMetaText()
-    : `${buildRewardMetaText()} One claim is allowed per day.`;
-  elements.claimRewardBtn.disabled = rewardDetails.claimed;
-  elements.claimRewardBtn.textContent = rewardDetails.claimed ? "Claimed Today" : "Claim Reward";
-  elements.resumeQuizBtn.classList.toggle("hidden", !hasSavedQuiz);
-  elements.resumeQuizBtn.textContent = hasSavedQuiz
-    ? `Resume Quiz (${state.activeQuiz.currentIndex + 1}/${state.activeQuiz.questions.length})`
-    : "Resume Quiz";
-  elements.difficultyButtons.forEach((button) => {
-    button.classList.toggle("is-selected", button.dataset.difficulty === state.preferredDifficulty);
-  });
+  elements.playerName.value = state.playerName || "";
+  elements.difficultyButtons.forEach((btn) => { btn.classList.toggle("is-selected", btn.dataset.difficulty === state.preferredDifficulty); });
 
-  renderLeaderboard();
-  renderHeader();
+  elements.rewardAmount.textContent = `${rewardDetails.amount} coins`;
+  elements.claimRewardBtn.disabled = rewardDetails.claimed;
+  elements.claimRewardBtn.textContent = rewardDetails.claimed ? "Claimed" : "Claim";
+
+  elements.resumeQuizBtn.classList.toggle("hidden", !hasSavedQuiz); renderRecentRewards();
 }
 
 function renderQuiz() {
   const quiz = state.activeQuiz;
-
-  if (!quiz) {
-    goHome();
-    return;
-  }
-
+  if (!quiz) { goHome(); return; }
   clearTimers();
-  showScreen("quiz-screen");
-
-  const difficulty = DIFFICULTY_CONFIG[quiz.difficulty];
+  
   const currentQuestion = quiz.questions[quiz.currentIndex];
   const completedCount = quiz.currentIndex + (quiz.questionResolved ? 1 : 0);
 
-  elements.questionCategory.textContent = `${currentQuestion.category} • Question ${quiz.currentIndex + 1} of ${
-    quiz.questions.length
-  }`;
+  elements.questionCategory.textContent = `${currentQuestion.category} • ${quiz.currentIndex + 1} / ${quiz.questions.length}`;
   elements.questionText.textContent = currentQuestion.prompt;
   elements.quizScoreChip.textContent = `Score ${quiz.score}`;
-  elements.quizProgressChip.textContent = `Question ${quiz.currentIndex + 1} / ${quiz.questions.length}`;
-  elements.quizDifficultyChip.textContent = `${difficulty.label} • ${difficulty.points} pts`;
+  elements.quizProgressChip.textContent = `${quiz.currentIndex + 1} / ${quiz.questions.length}`;
   elements.quizProgressBar.style.width = `${(completedCount / quiz.questions.length) * 100}%`;
-  elements.feedbackText.textContent = "Choose the best answer before the timer runs out.";
-  elements.feedbackText.className = "feedback-text";
+  elements.feedbackText.textContent = "Choose an answer."; elements.feedbackText.className = "feedback-text";
+  
+  updatePowerUpBadges(); renderOptions(currentQuestion, quiz.questionResolved);
 
-  renderOptions(currentQuestion, quiz.questionResolved);
-
-  if (quiz.questionResolved) {
-    applyResolvedStyles(currentQuestion, quiz);
-    scheduleAdvance();
-  } else {
-    updateTimerDisplay();
-    startTimer();
-  }
-
-  renderHeader();
+  if (quiz.questionResolved) { applyResolvedStyles(currentQuestion, quiz); scheduleAdvance(); } 
+  else { updateTimerDisplay(); startTimer(); }
 }
 
 function renderOptions(question, isResolved) {
-  elements.optionsContainer.textContent = "";
-
+  elements.optionsContainer.innerHTML = "";
   question.options.forEach((option, index) => {
     const button = document.createElement("button");
-    const badge = document.createElement("span");
-    const copy = document.createElement("span");
-
-    button.type = "button";
-    button.className = "option-btn";
-    button.dataset.option = option;
-    button.disabled = isResolved;
-    badge.className = "option-badge";
-    badge.textContent = String.fromCharCode(65 + index);
-    copy.className = "option-copy";
-    copy.textContent = option;
-
-    button.appendChild(badge);
-    button.appendChild(copy);
+    button.type = "button"; button.className = "option-btn";
+    button.dataset.option = option; button.disabled = isResolved;
+    button.innerHTML = `<span class="option-badge">${String.fromCharCode(65 + index)}</span><span class="option-copy">${option}</span>`;
     elements.optionsContainer.appendChild(button);
   });
 }
 
 function applyResolvedStyles(question, quiz) {
   const lastAnswer = quiz.answers[quiz.answers.length - 1];
-  const optionButtons = Array.from(elements.optionsContainer.querySelectorAll(".option-btn"));
+  const btns = Array.from(elements.optionsContainer.querySelectorAll(".option-btn"));
 
-  optionButtons.forEach((button) => {
-    const option = button.dataset.option;
-    button.disabled = true;
-
-    if (option === question.answer) {
-      button.classList.add("is-correct");
-      return;
-    }
-
-    if (quiz.selectedOption && option === quiz.selectedOption) {
-      button.classList.add("is-wrong");
-      return;
-    }
-
-    button.classList.add("is-muted");
+  btns.forEach((btn) => {
+    const opt = btn.dataset.option; btn.disabled = true;
+    if (opt === question.answer) btn.classList.add("is-correct");
+    else if (quiz.selectedOption && opt === quiz.selectedOption) btn.classList.add("is-wrong");
+    else btn.classList.add("is-muted");
   });
 
-  if (!lastAnswer) {
-    return;
+  if (!lastAnswer) return;
+  if(lastAnswer.resolutionType === "skip") {
+    elements.feedbackText.textContent = "Skipped!"; elements.feedbackText.classList.add("is-timeout"); return;
   }
-
   if (lastAnswer.isCorrect) {
-    elements.feedbackText.textContent = `Correct. +${DIFFICULTY_CONFIG[quiz.difficulty].points} points.`;
-    elements.feedbackText.classList.add("is-correct");
-    return;
+    elements.feedbackText.textContent = `Correct! +${DIFFICULTY_CONFIG[quiz.difficulty].points} pts.`; elements.feedbackText.classList.add("is-correct");
+  } else if (lastAnswer.resolutionType === "timeout") {
+    elements.feedbackText.textContent = `Time's up! Correct was ${lastAnswer.correctAnswer}.`; elements.feedbackText.classList.add("is-timeout");
+  } else {
+    elements.feedbackText.textContent = `Wrong. Correct was ${lastAnswer.correctAnswer}.`; elements.feedbackText.classList.add("is-wrong");
   }
-
-  if (lastAnswer.resolutionType === "timeout") {
-    elements.feedbackText.textContent = `Time's up. The correct answer was ${lastAnswer.correctAnswer}.`;
-    elements.feedbackText.classList.add("is-timeout");
-    return;
-  }
-
-  elements.feedbackText.textContent = `Not quite. The correct answer was ${lastAnswer.correctAnswer}.`;
-  elements.feedbackText.classList.add("is-wrong");
 }
 
-function startTimer() {
-  timerIntervalId = window.setInterval(() => {
-    if (updateTimerDisplay()) {
-      resolveQuestion(null, "timeout");
-    }
-  }, 200);
-}
+function startTimer() { timerIntervalId = window.setInterval(() => { if (updateTimerDisplay()) resolveQuestion(null, "timeout"); }, 200); }
 
 function updateTimerDisplay() {
-  if (!state.activeQuiz) {
-    return false;
-  }
-
-  const difficulty = DIFFICULTY_CONFIG[state.activeQuiz.difficulty];
-  const timeLimitMs = difficulty.timeLimit * 1000;
+  if (!state.activeQuiz) return false;
+  const timeLimitMs = DIFFICULTY_CONFIG[state.activeQuiz.difficulty].timeLimit * 1000;
   const elapsed = Date.now() - state.activeQuiz.questionStartedAt;
   const remainingMs = Math.max(0, timeLimitMs - elapsed);
   const remainingSeconds = Math.ceil(remainingMs / 1000);
@@ -504,614 +419,263 @@ function updateTimerDisplay() {
 
   elements.timerValue.textContent = `${remainingSeconds}s`;
   elements.timerBar.style.width = `${fillPercent}%`;
-  elements.timerBar.style.background =
-    remainingMs <= timeLimitMs / 3
-      ? "linear-gradient(90deg, #ff7b73, #ffd977)"
-      : "linear-gradient(90deg, #58d5bf, #ffd06b)";
+  elements.timerBar.style.background = remainingMs <= timeLimitMs / 3 ? "linear-gradient(90deg, #ff7b73, #ffd977)" : "linear-gradient(90deg, #58d5bf, #ffd06b)";
   elements.timerShell.classList.toggle("is-urgent", remainingMs <= timeLimitMs / 3);
 
   return remainingMs <= 0;
 }
 
 function scheduleAdvance() {
-  if (!state.activeQuiz || !state.activeQuiz.questionResolved) {
-    return;
-  }
-
-  const waitTime = Math.max(0, state.activeQuiz.advanceAfterAt - Date.now());
+  const quiz = state.activeQuiz; if (!quiz || !quiz.questionResolved) return;
+  const waitTime = Math.max(0, quiz.advanceAfterAt - Date.now());
   advanceTimeoutId = window.setTimeout(advanceQuiz, waitTime);
 }
 
 function advanceQuiz() {
-  const quiz = state.activeQuiz;
-
-  if (!quiz) {
-    return;
-  }
-
-  clearTimers();
-  quiz.currentIndex += 1;
-
-  if (quiz.currentIndex >= quiz.questions.length) {
-    finishQuiz();
-    return;
-  }
-
-  quiz.questionStartedAt = Date.now();
-  quiz.questionResolved = false;
-  quiz.selectedOption = null;
-  quiz.resolutionType = null;
-  quiz.advanceAfterAt = null;
-
-  saveState();
-  renderQuiz();
+  const quiz = state.activeQuiz; if (!quiz) return;
+  clearTimers(); quiz.currentIndex += 1;
+  if (quiz.currentIndex >= quiz.questions.length) { finishQuiz(); return; }
+  
+  quiz.questionStartedAt = Date.now(); quiz.questionResolved = false;
+  quiz.selectedOption = null; quiz.resolutionType = null; quiz.advanceAfterAt = null;
+  saveState(); renderQuiz();
 }
 
 function finishQuiz() {
-  const quiz = state.activeQuiz;
-
-  if (!quiz) {
-    return;
+  const quiz = state.activeQuiz; if (!quiz) return;
+  const accuracy = quiz.questions.length ? Math.round((quiz.correctCount / quiz.questions.length) * 100) : 0;
+  
+  state.gamesPlayed += 1; state.bestScore = Math.max(state.bestScore, quiz.score);
+  state.totalScore += quiz.score; state.totalCorrectAnswers += quiz.correctCount; state.totalQuestionsAnswered += quiz.questions.length;
+  
+  const xpEarned = (quiz.correctCount * 15) + (accuracy === 100 ? 50 : 0);
+  state.xp += xpEarned;
+  
+  let xpForNextLevel = state.level * 100; let levelUpEarned = false;
+  if (state.xp >= xpForNextLevel) {
+     state.xp -= xpForNextLevel; state.level += 1; state.coins += 50;
+     levelUpEarned = true; addRecentReward(`Level ${state.level} Reached! (+50🪙)`);
   }
 
-  const accuracy = Math.round((quiz.correctCount / quiz.questions.length) * 100);
-  const bonusCoins = calculateQuizBonus(quiz.correctCount, quiz.difficulty, accuracy);
+  let bonusCoins = Math.floor(xpEarned / 2); state.coins += bonusCoins;
+  if (levelUpEarned) showToast(`🎉 Level Up! You are now Level ${state.level}!`, "success");
 
-  state.gamesPlayed += 1;
-  state.coins += bonusCoins;
-  state.bestScore = Math.max(state.bestScore, quiz.score);
-  state.totalCorrectAnswers += quiz.correctCount;
-  state.totalQuestionsAnswered += quiz.questions.length;
+  let heading = "Round complete.";
+  if(accuracy >= 80) heading = "Great Job!"; else if(accuracy <= 30) heading = "Needs Practice!";
 
   state.lastResult = {
-    difficulty: quiz.difficulty,
-    score: quiz.score,
-    totalQuestions: quiz.questions.length,
-    correctCount: quiz.correctCount,
-    wrongCount: quiz.wrongCount,
-    accuracy,
-    bonusCoins,
-    streak: state.currentStreak,
-    answers: quiz.answers,
-    completedAt: Date.now(),
+    difficulty: quiz.difficulty, score: quiz.score, totalQuestions: quiz.questions.length,
+    correctCount: quiz.correctCount, wrongCount: quiz.wrongCount, accuracy,
+    xpEarned, bonusCoins, heading, answers: quiz.answers, completedAt: Date.now(),
   };
 
-  updateLeaderboard(state.lastResult);
-  state.activeQuiz = null;
-
-  saveState();
-  renderHeader();
-  renderHome();
-  renderResult();
+  state.activeQuiz = null; saveState(); renderHeader(); renderResult();
   showScreen("result-screen");
-  showToast(`Round complete. You earned ${bonusCoins} bonus coins.`, "success");
 }
 
 function renderResult() {
-  if (!state.lastResult) {
-    return;
-  }
+  const result = state.lastResult; if (!result) return;
+  elements.resultHeading.textContent = result.heading;
+  elements.resultSummary.textContent = `Answered ${result.correctCount}/${result.totalQuestions} correctly. Got ${result.bonusCoins} coins.`;
+  elements.resultScore.textContent = String(result.score); elements.resultXp.textContent = `+${result.xpEarned} XP`;
+  
+  elements.levelDisplayStart.textContent = `Lvl ${state.level}`;
+  if(elements.levelDisplayEnd) elements.levelDisplayEnd.textContent = `Lvl ${state.level + 1}`;
+  elements.xpProgressBar.style.width = `${Math.min(100, (state.xp / (state.level*100))*100)}%`;
 
-  const result = state.lastResult;
-  const performance = getPerformanceProfile(result.accuracy);
-
-  elements.resultHeading.textContent = performance.heading;
-  elements.resultSummary.textContent = `${getPlayerName()}, you answered ${result.correctCount} of ${
-    result.totalQuestions
-  } questions correctly on ${DIFFICULTY_CONFIG[result.difficulty].label}.`;
-  elements.resultScore.textContent = String(result.score);
-  elements.resultPerformanceTag.textContent = performance.label;
-  elements.resultAccuracy.textContent = `${result.accuracy}%`;
-  elements.resultCorrect.textContent = `${result.correctCount} / ${result.totalQuestions}`;
-  elements.resultBonus.textContent = `+${result.bonusCoins}`;
-  elements.resultStreak.textContent = `${result.streak} day${result.streak === 1 ? "" : "s"}`;
-
-  renderResultBreakdown(result);
-  renderAnswerReview(result.answers);
-}
-
-function renderResultBreakdown(result) {
-  const details = [
-    { label: "Difficulty", value: DIFFICULTY_CONFIG[result.difficulty].label },
-    { label: "Questions Played", value: String(result.totalQuestions) },
-    { label: "Best Score", value: String(state.bestScore) },
-    { label: "Total Coins", value: String(state.coins) },
-  ];
-
-  elements.resultBreakdown.textContent = "";
-
-  details.forEach((detail) => {
-    const row = document.createElement("div");
-    const label = document.createElement("span");
-    const value = document.createElement("strong");
-
-    row.className = "breakdown-row";
-    label.className = "breakdown-label";
-    label.textContent = detail.label;
-    value.textContent = detail.value;
-
-    row.appendChild(label);
-    row.appendChild(value);
-    elements.resultBreakdown.appendChild(row);
-  });
-}
-
-function renderAnswerReview(answers) {
-  elements.answerReview.textContent = "";
-
-  answers.forEach((answer, index) => {
-    const card = document.createElement("article");
-    const header = document.createElement("div");
-    const title = document.createElement("p");
-    const pill = document.createElement("span");
-    const selected = document.createElement("p");
-    const correct = document.createElement("p");
-    const resolutionClass = answer.isCorrect ? "correct" : answer.resolutionType === "timeout" ? "timeout" : "wrong";
-
-    card.className = "review-card";
-    header.className = "review-card-header";
-    title.className = "review-title";
-    selected.className = "review-answer";
-    correct.className = "review-answer";
-    pill.className = `review-pill ${resolutionClass}`;
-    pill.textContent = answer.isCorrect ? "Correct" : answer.resolutionType === "timeout" ? "Timed Out" : "Wrong";
-    title.textContent = `${index + 1}. ${answer.prompt}`;
-    selected.textContent = `Your answer: ${answer.selectedOption || "No answer submitted"}`;
-    correct.textContent = `Correct answer: ${answer.correctAnswer}`;
-
-    header.appendChild(title);
-    header.appendChild(pill);
-    card.appendChild(header);
-    card.appendChild(selected);
-    card.appendChild(correct);
-    elements.answerReview.appendChild(card);
-  });
-}
-
-function claimDailyReward() {
-  const today = getDateKey();
-
-  if (state.lastClaimDate === today) {
-    showToast("You already claimed today's reward.", "warning");
-    return;
-  }
-
-  const rewardDetails = getDailyRewardDetails();
-
-  state.lastClaimDate = today;
-  state.coins += rewardDetails.amount;
-  state.rewardHistory.unshift({
-    date: today,
-    amount: rewardDetails.amount,
-    bonus: rewardDetails.bonus,
-  });
-  state.rewardHistory = state.rewardHistory.slice(0, 12);
-
-  saveState();
-  renderHeader();
-  renderHome();
-
-  showToast(
-    rewardDetails.bonus > 0
-      ? `Reward claimed: ${rewardDetails.amount} coins including a streak bonus.`
-      : `Reward claimed: ${rewardDetails.amount} coins added to your wallet.`,
-    "success"
-  );
-}
-
-function renderLeaderboard() {
-  elements.leaderboardList.textContent = "";
-
-  if (!state.leaderboard.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "Finish a quiz to seed the leaderboard.";
-    elements.leaderboardList.appendChild(empty);
-    return;
-  }
-
-  state.leaderboard.forEach((entry, index) => {
-    const row = document.createElement("div");
-    const rank = document.createElement("span");
-    const info = document.createElement("div");
-    const name = document.createElement("span");
-    const meta = document.createElement("span");
-    const score = document.createElement("span");
-
-    row.className = "leaderboard-row";
-    rank.className = "leaderboard-rank";
-    info.className = "leaderboard-info";
-    name.className = "leaderboard-name";
-    meta.className = "leaderboard-meta";
-    score.className = "leaderboard-score";
-    rank.textContent = `#${index + 1}`;
-    name.textContent = entry.name;
-    meta.textContent = `${entry.difficulty} • ${entry.accuracy}% • ${formatDateLabel(entry.date)}`;
-    score.textContent = `${entry.score} pts`;
-
-    info.appendChild(name);
-    info.appendChild(meta);
-    row.appendChild(rank);
-    row.appendChild(info);
-    row.appendChild(score);
-    elements.leaderboardList.appendChild(row);
+  elements.answerReview.innerHTML = "";
+  result.answers.forEach((ans, idx) => {
+      const cls = ans.isCorrect ? "correct" : (ans.resolutionType==="skip"?"timeout":"wrong");
+      const label = ans.isCorrect ? "Correct" : (ans.resolutionType==="skip"?"Skipped":"Wrong");
+      elements.answerReview.innerHTML += `
+        <div class="review-card">
+           <div class="review-card-header">
+             <p class="review-title">${idx+1}. ${ans.prompt}</p><span class="review-pill ${cls}">${label}</span>
+           </div>
+           <p class="review-answer">Your answer: ${ans.selectedOption || "None"}</p><p class="review-answer">Correct: ${ans.correctAnswer}</p>
+        </div>`;
   });
 }
 
 function renderHeader() {
-  elements.headerStreakChip.textContent = `🔥 Streak ${state.currentStreak}`;
-  elements.headerCoinsChip.textContent = `🪙 Coins ${state.coins}`;
+  elements.headerLevelChip.textContent = `⭐ Lvl ${state.level || 1}`;
+  elements.headerStreakChip.textContent = `🔥 ${state.currentStreak || 0}`;
+  elements.headerCoinsChip.textContent = `🪙 ${state.coins || 0}`;
 }
 
-function showScreen(screenId) {
-  currentScreenId = screenId;
-
-  elements.screens.forEach((screen) => {
-    const isActive = screen.id === screenId;
-    screen.hidden = !isActive;
-    screen.classList.toggle("is-visible", isActive);
-  });
+// -- LEVEL MODAL PROCESS --
+function openLevelModal() {
+  if (!elements.levelXpModal) return;
+  const currentLvl = state.level || 1;
+  const currentXp = state.xp || 0;
+  const reqXp = currentLvl * 100;
+  
+  elements.modalLevelDisplay.textContent = `Lvl ${currentLvl}`;
+  elements.modalXpCurrent.textContent = `${currentXp} XP`;
+  elements.modalXpReq.textContent = `${reqXp} XP`;
+  elements.modalXpVisualRatio.textContent = `${currentXp} / ${reqXp} XP`;
+  elements.modalXpRemaining.textContent = `${reqXp - currentXp} XP needed to reach next level`;
+  
+  const pct = Math.min(100, Math.max(0, Math.round((currentXp / reqXp) * 100)));
+  elements.modalXpBar.style.width = `${pct}%`;
+  
+  elements.levelXpModal.classList.remove("hidden");
 }
 
-function showToast(message, tone = "accent") {
-  clearTimeout(toastTimeoutId);
-  elements.toast.textContent = message;
-  elements.toast.className = `toast ${tone} is-visible`;
+// -- SPIN WHEEL DOM GENERATOR --
+function initSpinWheelSlices() {
+   elements.spinWheel.innerHTML = "";
+   SPIN_REWARDS.forEach((rew, i) => {
+      const angle = i * 60; // 6 segments exactly
+      const label = document.createElement("div");
+      label.className = "wheel-label";
+      // To correctly face out visually relative to center
+      label.style.transform = `rotate(${angle + 30 - 90}deg)`; 
+      label.innerHTML = `<span style="display:inline-flex; align-items:center; gap:0.25rem;">${rew.icon} ${rew.text}</span>`;
+      elements.spinWheel.appendChild(label);
+   });
+}
 
-  toastTimeoutId = window.setTimeout(() => {
-    elements.toast.className = "toast";
-  }, 2800);
+// -- SPIN WHEEL PROCESS --
+function openSpinWheel() {
+  initSpinWheelSlices();
+  const today = getDateKey();
+  
+  document.getElementById("spin-title").textContent = "Daily Spin Wheel";
+  
+  if (state.lastSpinDate === today) {
+    elements.wheelView.classList.add("hidden"); elements.rewardView.classList.remove("hidden");
+    elements.rewardIcon.textContent = "⏳";
+    document.getElementById("spin-title").textContent = "Come back tomorrow!";
+    elements.rewardText.textContent = "You have already spun the wheel today."; 
+    elements.collectRewardBtn.style.display = "none";
+    return;
+  }
+  
+  elements.wheelView.classList.remove("hidden"); 
+  elements.rewardView.classList.add("hidden");
+  elements.collectRewardBtn.style.display = "block";
+  document.getElementById("spin-status").textContent = "Test your luck for extra rewards!";
+  elements.spinBtn.disabled = false;
+  elements.spinWheel.style.transition = 'none'; elements.spinWheel.style.transform = `rotate(0deg)`;
+  
+  elements.spinModal.classList.remove("hidden");
+}
+
+function spinWheelAction() {
+  elements.spinBtn.disabled = true; document.getElementById("spin-status").textContent = "Spinning...";
+  
+  const winIdx = Math.floor(Math.random() * SPIN_REWARDS.length);
+  currentSpinReward = SPIN_REWARDS[winIdx];
+  
+  // Angle logic to stop the wheel predictably on the correct slice
+  // Slice i spans from i*60 to (i+1)*60. Center is i*60 + 30.
+  // Wheel spins clockwise, pointer is at -90deg (or 0deg visual top depending on CSS layout, it's strictly at top).
+  // Pure math: to bring slice center `winIdx * 60 + 30` to 0deg top, we rotate by `-(winIdx*60+30)`.
+  const targetRotation = 360 * 5 - (winIdx * 60 + 30);
+  
+  elements.spinWheel.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
+  elements.spinWheel.style.transform = `rotate(${targetRotation}deg)`;
+  
+  setTimeout(() => {
+     elements.wheelView.classList.add("hidden"); 
+     document.getElementById("spin-title").textContent = "Reward Unlocked!";
+     elements.rewardIcon.textContent = currentSpinReward.icon; 
+     elements.rewardText.textContent = `🎉 Congratulations! You won ${currentSpinReward.text}!`;
+     elements.rewardView.classList.remove("hidden");
+  }, 4100);
+}
+
+function collectSpinReward() {
+   if (!currentSpinReward) return;
+   
+   if (currentSpinReward.coins) state.coins += currentSpinReward.coins;
+   if (currentSpinReward.xp) {
+      state.xp += currentSpinReward.xp;
+      const req = state.level * 100;
+      if(state.xp >= req) {
+         state.xp -= req; state.level++; state.coins += 50;
+      }
+   }
+   if (currentSpinReward.p50) state.powerUps["5050"] += currentSpinReward.p50;
+   if (currentSpinReward.pSkip) state.powerUps["skip"] += currentSpinReward.pSkip;
+   
+   state.lastSpinDate = getDateKey();
+   addRecentReward(`Wheel: ${currentSpinReward.text}`);
+   saveState(); renderHeader();
+   
+   elements.spinModal.classList.add("hidden");
+   currentSpinReward = null;
+}
+
+// Utility and Helpers
+function claimDailyReward() {
+  const today = getDateKey();
+  if (state.lastClaimDate === today) { showToast("Already claimed today.", "warning"); return; }
+  const rd = getDailyRewardDetails();
+  state.lastClaimDate = today; state.coins += rd.amount;
+  addRecentReward(`Daily Hub: ${rd.amount} coins`);
+  saveState(); renderHeader(); renderHome();
+  showToast(`Claimed ${rd.amount} coins!`, "success");
 }
 
 function syncDailyActivity() {
   const today = getDateKey();
-
-  if (!state.lastActiveDate) {
-    state.currentStreak = 1;
-    state.longestStreak = 1;
-    state.lastActiveDate = today;
-    saveState();
-    return "Your first daily streak has started.";
-  }
-
-  if (state.lastActiveDate === today) {
-    return "";
-  }
-
-  const daysSinceLastVisit = getDayDifference(state.lastActiveDate, today);
-
-  if (daysSinceLastVisit === 1) {
-    state.currentStreak += 1;
-    state.longestStreak = Math.max(state.longestStreak, state.currentStreak);
-    state.lastActiveDate = today;
-    state.lostStreak = 0;
-    saveState();
-    return `Streak extended to ${state.currentStreak} day${state.currentStreak === 1 ? "" : "s"}.`;
-  }
-
-  if (state.currentStreak > 1 && daysSinceLastVisit === 2) {
-    state.lostStreak = state.currentStreak;
-  } else if (daysSinceLastVisit > 1) {
-    state.lostStreak = 0;
-  }
-
-  state.currentStreak = 1;
-  state.longestStreak = Math.max(state.longestStreak, state.currentStreak);
-  state.lastActiveDate = today;
-  saveState();
-  return "A missed day reset the streak, but a fresh run starts today.";
+  if (!state.lastActiveDate) { state.currentStreak = 1; state.longestStreak = 1; state.lastActiveDate = today; return "First streak started."; }
+  if (state.lastActiveDate === today) return "";
+  const from = createSafeDate(state.lastActiveDate); const to = createSafeDate(today);
+  const diff = Math.round((to - from)/86400000);
+  if (diff === 1) {
+    state.currentStreak += 1; state.longestStreak = Math.max(state.longestStreak, state.currentStreak); state.lostStreak = 0;
+  } else if (diff > 1) { state.lostStreak = state.currentStreak; state.currentStreak = 1; }
+  state.lastActiveDate = today; saveState();
+  return diff===1 ? "Streak extended!" : (diff>1 ? "Streak lost!" : "");
 }
 
 function getDailyRewardDetails() {
-  const today = getDateKey();
-  const bonus = STREAK_BONUSES[state.currentStreak] || 0;
-
-  return {
-    amount: DAILY_REWARD_BASE + bonus,
-    bonus,
-    claimed: state.lastClaimDate === today,
-  };
+  const today = getDateKey(); const bonus = STREAK_BONUSES[state.currentStreak] || 0;
+  return { amount: DAILY_REWARD_BASE + bonus, bonus, claimed: state.lastClaimDate === today };
 }
 
-function buildRewardMetaText() {
-  const milestones = [3, 7, 15];
-  const nextMilestone = milestones.find((milestone) => milestone > state.currentStreak);
-
-  if (!nextMilestone) {
-    return "You have unlocked every listed milestone. Keep the streak alive.";
-  }
-
-  const daysRemaining = nextMilestone - state.currentStreak;
-  return `${daysRemaining} more day${daysRemaining === 1 ? "" : "s"} until the ${nextMilestone}-day bonus.`;
+function showScreen(screenId) {
+  currentScreenId = screenId;
+  elements.screens.forEach(s => s.classList.replace("is-visible", "hidden") || s.classList.add("hidden"));
+  const act = document.getElementById(screenId);
+  if(act) { act.classList.remove("hidden"); act.classList.add("is-visible"); }
+  
+  elements.navTriggers.forEach(n => n.classList.toggle("is-active", n.dataset.target === screenId));
 }
 
-function updateLeaderboard(result) {
-  const entry = {
-    name: getPlayerName(),
-    difficulty: DIFFICULTY_CONFIG[result.difficulty].label,
-    score: result.score,
-    accuracy: result.accuracy,
-    date: getDateKey(),
-    timestamp: Date.now(),
-  };
-
-  state.leaderboard = [entry, ...state.leaderboard]
-    .sort((left, right) => {
-      if (right.score !== left.score) {
-        return right.score - left.score;
-      }
-
-      if (right.accuracy !== left.accuracy) {
-        return right.accuracy - left.accuracy;
-      }
-
-      return (right.timestamp || 0) - (left.timestamp || 0);
-    })
-    .slice(0, MAX_LEADERBOARD_ENTRIES);
-}
-
-function calculateQuizBonus(correctCount, difficulty, accuracy) {
-  const multiplier = {
-    easy: 2,
-    medium: 3,
-    hard: 4,
-  }[difficulty];
-
-  let bonus = correctCount * multiplier;
-
-  if (accuracy === 100) {
-    bonus += 20;
-  } else if (accuracy >= 80) {
-    bonus += 12;
-  } else if (accuracy >= 60) {
-    bonus += 6;
-  }
-
-  return bonus;
-}
-
-function getPerformanceProfile(accuracy) {
-  if (accuracy === 100) {
-    return {
-      heading: "Perfect streak.",
-      label: "Flawless",
-    };
-  }
-
-  if (accuracy >= 80) {
-    return {
-      heading: "Strong finish.",
-      label: "Elite",
-    };
-  }
-
-  if (accuracy >= 60) {
-    return {
-      heading: "Solid run.",
-      label: "Sharp",
-    };
-  }
-
-  return {
-    heading: "Good warm-up.",
-    label: "Building",
-  };
-}
-
-function ensureAudioContext() {
-  if (audioContext) {
-    if (audioContext.state === "suspended") {
-      audioContext.resume().catch(() => {});
-    }
-    return;
-  }
-
-  const ContextClass = window.AudioContext || window.webkitAudioContext;
-
-  if (!ContextClass) {
-    return;
-  }
-
-  audioContext = new ContextClass();
-}
-
-function playOutcomeSound(isCorrect, resolutionType) {
-  ensureAudioContext();
-
-  if (!audioContext) {
-    return;
-  }
-
-  const now = audioContext.currentTime;
-
-  if (isCorrect) {
-    playTone(620, now, 0.12, "sine", 0.08);
-    playTone(830, now + 0.1, 0.16, "triangle", 0.06);
-    return;
-  }
-
-  if (resolutionType === "timeout") {
-    playTone(250, now, 0.14, "triangle", 0.08);
-    playTone(180, now + 0.1, 0.18, "triangle", 0.06);
-    return;
-  }
-
-  playTone(210, now, 0.16, "sawtooth", 0.08);
-  playTone(150, now + 0.12, 0.18, "sawtooth", 0.06);
-}
-
-function playTone(frequency, startTime, duration, type, volume) {
-  const oscillator = audioContext.createOscillator();
-  const gainNode = audioContext.createGain();
-
-  oscillator.type = type;
-  oscillator.frequency.setValueAtTime(frequency, startTime);
-  gainNode.gain.setValueAtTime(0.0001, startTime);
-  gainNode.gain.exponentialRampToValueAtTime(volume, startTime + 0.02);
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-
-  oscillator.connect(gainNode);
-  gainNode.connect(audioContext.destination);
-  oscillator.start(startTime);
-  oscillator.stop(startTime + duration);
-}
-
-function clearTimers() {
-  window.clearInterval(timerIntervalId);
-  window.clearTimeout(advanceTimeoutId);
-  timerIntervalId = null;
-  advanceTimeoutId = null;
+function showToast(message, tone="accent") {
+  clearTimeout(toastTimeoutId); elements.toast.textContent = message; elements.toast.className = `toast ${tone} is-visible`;
+  toastTimeoutId = setTimeout(() => elements.toast.className = "toast", 2800);
 }
 
 function loadState() {
-  let storedState = null;
-
-  try {
-    storedState = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
-  } catch (error) {
-    storedState = null;
-  }
-
-  const mergedState = {
-    ...DEFAULT_STATE,
-    ...(storedState || {}),
-    rewardHistory: Array.isArray(storedState?.rewardHistory) ? storedState.rewardHistory : [],
-    leaderboard: Array.isArray(storedState?.leaderboard) ? storedState.leaderboard : [],
-    activeQuiz: sanitizeActiveQuiz(storedState?.activeQuiz),
-    lastResult: sanitizeLastResult(storedState?.lastResult),
-    seenQuestions: {
-      easy: Array.isArray(storedState?.seenQuestions?.easy) ? storedState.seenQuestions.easy : [],
-      medium: Array.isArray(storedState?.seenQuestions?.medium) ? storedState.seenQuestions.medium : [],
-      hard: Array.isArray(storedState?.seenQuestions?.hard) ? storedState.seenQuestions.hard : [],
-    },
-  };
-
-  if (!DIFFICULTY_CONFIG[mergedState.preferredDifficulty]) {
-    mergedState.preferredDifficulty = DEFAULT_STATE.preferredDifficulty;
-  }
-
-  return mergedState;
+  let s; try { s = JSON.parse(window.localStorage.getItem(STORAGE_KEY)); } catch(e){}
+  const merged = { ...DEFAULT_STATE, ...(s||{}) };
+  merged.powerUps = { ...DEFAULT_STATE.powerUps, ...(merged.powerUps||{}) };
+  merged.categoryStats = merged.categoryStats || {};
+  merged.recentRewards = merged.recentRewards || [];
+  return merged;
 }
 
-function saveState() {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (error) {
-    return;
-  }
+function saveState() { try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){} }
+function ensureAudioContext() { if (audioContext && audioContext.state === "suspended") audioContext.resume().catch(()=>{}); if (!audioContext) { const C = window.AudioContext || window.webkitAudioContext; if(C) audioContext = new C(); } }
+function playOutcomeSound(isCorrect, resolutionType) {
+  ensureAudioContext(); if(!audioContext) return; const now = audioContext.currentTime;
+  if(isCorrect) { playTone(620,now,0.12,"sine",0.08); playTone(830,now+0.1,0.16,"triangle",0.06); } 
+  else if(resolutionType==="timeout"){ playTone(250,now,0.14,"triangle",0.08); playTone(180,now+0.1,0.18,"triangle",0.06); } 
+  else { playTone(210,now,0.16,"sawtooth",0.08); playTone(150,now+0.12,0.18,"sawtooth",0.06); }
 }
-
-function sanitizeActiveQuiz(activeQuiz) {
-  if (!activeQuiz || !Array.isArray(activeQuiz.questions) || activeQuiz.questions.length === 0) {
-    return null;
-  }
-
-  const difficulty = DIFFICULTY_CONFIG[activeQuiz.difficulty] ? activeQuiz.difficulty : "medium";
-  const questions = activeQuiz.questions
-    .filter((question) => {
-      return (
-        question &&
-        typeof question.prompt === "string" &&
-        typeof question.answer === "string" &&
-        Array.isArray(question.options) &&
-        question.options.length === 4
-      );
-    })
-    .map((question) => ({
-      id: question.id || `${difficulty}-stored-question`,
-      prompt: question.prompt,
-      category: question.category || "Quiz",
-      difficulty,
-      answer: question.answer,
-      options: question.options.slice(0, 4),
-    }));
-
-  if (!questions.length) {
-    return null;
-  }
-
-  const safeIndex = Math.min(Math.max(Number(activeQuiz.currentIndex) || 0, 0), questions.length - 1);
-
-  return {
-    difficulty,
-    questions,
-    currentIndex: safeIndex,
-    score: Number(activeQuiz.score) || 0,
-    correctCount: Number(activeQuiz.correctCount) || 0,
-    wrongCount: Number(activeQuiz.wrongCount) || 0,
-    answers: Array.isArray(activeQuiz.answers) ? activeQuiz.answers : [],
-    startedAt: Number(activeQuiz.startedAt) || Date.now(),
-    questionStartedAt: Number(activeQuiz.questionStartedAt) || Date.now(),
-    questionResolved: Boolean(activeQuiz.questionResolved),
-    selectedOption: typeof activeQuiz.selectedOption === "string" ? activeQuiz.selectedOption : null,
-    resolutionType: typeof activeQuiz.resolutionType === "string" ? activeQuiz.resolutionType : null,
-    advanceAfterAt: Number(activeQuiz.advanceAfterAt) || null,
-  };
+function playTone(f, s, d, t, v) {
+  const o = audioContext.createOscillator(); const g = audioContext.createGain();
+  o.type = t; o.frequency.value = f;
+  g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(v, s+0.02); g.gain.exponentialRampToValueAtTime(0.0001, s+d);
+  o.connect(g); g.connect(audioContext.destination); o.start(s); o.stop(s+d);
 }
-
-function sanitizeLastResult(lastResult) {
-  if (!lastResult || typeof lastResult !== "object" || !DIFFICULTY_CONFIG[lastResult.difficulty]) {
-    return null;
-  }
-
-  return {
-    difficulty: lastResult.difficulty,
-    score: Number(lastResult.score) || 0,
-    totalQuestions: Number(lastResult.totalQuestions) || 0,
-    correctCount: Number(lastResult.correctCount) || 0,
-    wrongCount: Number(lastResult.wrongCount) || 0,
-    accuracy: Number(lastResult.accuracy) || 0,
-    bonusCoins: Number(lastResult.bonusCoins) || 0,
-    streak: Number(lastResult.streak) || 0,
-    answers: Array.isArray(lastResult.answers) ? lastResult.answers : [],
-    completedAt: Number(lastResult.completedAt) || Date.now(),
-  };
-}
-
-function sanitizeName(value) {
-  return value.replace(/\s+/g, " ").slice(0, 24);
-}
-
-function getPlayerName() {
-  return state.playerName.trim() || "Player One";
-}
-
-function getDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getDayDifference(fromDateKey, toDateKey) {
-  const from = createSafeDate(fromDateKey);
-  const to = createSafeDate(toDateKey);
-  return Math.round((to - from) / 86400000);
-}
-
-function createSafeDate(dateKey) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  return new Date(year, month - 1, day, 12, 0, 0, 0);
-}
-
-function formatDateLabel(dateKey) {
-  if (!dateKey) {
-    return "Today";
-  }
-
-  return createSafeDate(dateKey).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function shuffleArray(items) {
-  const copy = items.slice();
-
-  for (let index = copy.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1));
-    [copy[index], copy[randomIndex]] = [copy[randomIndex], copy[index]];
-  }
-
-  return copy;
-}
+function getDateKey(date = new Date()) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }
+function createSafeDate(dateKey) { const [y, m, d] = dateKey.split("-").map(Number); return new Date(y, m-1, d, 12, 0,0,0); }
+function sanitizeName(v) { return v.replace(/\s+/g," ").slice(0,24); }
+function shuffleArray(items) { const cp = items.slice(); for(let i=cp.length-1; i>0; i--){ const j = Math.floor(Math.random()*(i+1)); [cp[i], cp[j]] = [cp[j], cp[i]]; } return cp; }
+function clearTimers() { clearInterval(timerIntervalId); clearTimeout(advanceTimeoutId); timerIntervalId=null; advanceTimeoutId=null; }
