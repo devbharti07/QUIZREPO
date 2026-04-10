@@ -256,19 +256,37 @@ function setPreferredDifficulty(difficulty) {
 }
 
 function startNewQuiz() {
-  const difficulty = state.preferredDifficulty;
+  const difficulty = state.preferredDifficulty || "medium";
+  
+  if (!window.QUIZ_QUESTIONS || window.QUIZ_QUESTIONS.length === 0) {
+      showToast("Error: No question data available.", "warning");
+      return;
+  }
+  
+  if (!state.seenQuestions) state.seenQuestions = { easy: [], medium: [], hard: [] };
+  if (!state.seenQuestions[difficulty]) state.seenQuestions[difficulty] = [];
+  
   const fullPool = window.QUIZ_QUESTIONS.filter((question) => question.difficulty === difficulty);
+  
+  if (fullPool.length === 0) {
+      showToast(`No questions found for ${difficulty} difficulty.`, "warning");
+      return;
+  }
+
   let questionPool = fullPool.filter((q) => !state.seenQuestions[difficulty].includes(q.id));
   
   let roundCount = QUESTIONS_PER_ROUND;
-  if (questionPool.length < roundCount) { state.seenQuestions[difficulty] = []; questionPool = fullPool; }
+  if (questionPool.length < roundCount) { 
+      state.seenQuestions[difficulty] = []; 
+      questionPool = fullPool; 
+  }
 
   const selectedQuestions = shuffleArray(questionPool).slice(0, roundCount);
   selectedQuestions.forEach(q => state.seenQuestions[difficulty].push(q.id));
 
   const questions = selectedQuestions.map((q) => ({
       id: q.id, prompt: q.prompt, category: q.category, difficulty: q.difficulty,
-      answer: q.answer, options: shuffleArray(q.options.slice()),
+      answer: q.answer, options: shuffleArray(q.options ? q.options.slice() : [])
   }));
 
   state.activeQuiz = {
@@ -353,10 +371,12 @@ function renderHome() {
 
 function renderQuiz() {
   const quiz = state.activeQuiz;
-  if (!quiz) { goHome(); return; }
+  if (!quiz || !quiz.questions || quiz.questions.length === 0) { goHome(); return; }
   clearTimers();
   
   const currentQuestion = quiz.questions[quiz.currentIndex];
+  if (!currentQuestion) { finishQuiz(); return; }
+
   const completedCount = quiz.currentIndex + (quiz.questionResolved ? 1 : 0);
 
   elements.questionCategory.textContent = `${currentQuestion.category} • ${quiz.currentIndex + 1} / ${quiz.questions.length}`;
@@ -484,7 +504,7 @@ function renderResult() {
   elements.xpProgressBar.style.width = `${Math.min(100, (state.xp / (state.level*100))*100)}%`;
 
   elements.answerReview.innerHTML = "";
-  result.answers.forEach((ans, idx) => {
+  (result.answers || []).forEach((ans, idx) => {
       const cls = ans.isCorrect ? "correct" : (ans.resolutionType==="skip"?"timeout":"wrong");
       const label = ans.isCorrect ? "Correct" : (ans.resolutionType==="skip"?"Skipped":"Wrong");
       elements.answerReview.innerHTML += `
@@ -639,11 +659,21 @@ function getDailyRewardDetails() {
 
 function showScreen(screenId) {
   currentScreenId = screenId;
-  elements.screens.forEach(s => s.classList.replace("is-visible", "hidden") || s.classList.add("hidden"));
+  elements.screens.forEach(s => {
+      s.classList.remove("is-visible");
+      s.classList.add("hidden");
+      s.hidden = true;
+  });
   const act = document.getElementById(screenId);
-  if(act) { act.classList.remove("hidden"); act.classList.add("is-visible"); }
+  if(act) { 
+      act.classList.remove("hidden"); 
+      act.classList.add("is-visible"); 
+      act.hidden = false;
+  }
   
-  elements.navTriggers.forEach(n => n.classList.toggle("is-active", n.dataset.target === screenId));
+  if (elements.navTriggers) {
+      elements.navTriggers.forEach(n => n.classList.toggle("is-active", n.dataset.target === screenId));
+  }
 }
 
 function showToast(message, tone="accent") {
@@ -657,6 +687,10 @@ function loadState() {
   merged.powerUps = { ...DEFAULT_STATE.powerUps, ...(merged.powerUps||{}) };
   merged.categoryStats = merged.categoryStats || {};
   merged.recentRewards = merged.recentRewards || [];
+  merged.seenQuestions = merged.seenQuestions || { easy: [], medium: [], hard: [] };
+  if (!merged.seenQuestions.easy) merged.seenQuestions.easy = [];
+  if (!merged.seenQuestions.medium) merged.seenQuestions.medium = [];
+  if (!merged.seenQuestions.hard) merged.seenQuestions.hard = [];
   return merged;
 }
 
